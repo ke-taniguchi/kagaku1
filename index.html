@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>発展化学式 タイムアタック</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 化学式の上下付き文字の調整 */
+        sub, sup { font-size: 0.7em; line-height: 0; position: relative; vertical-align: baseline; }
+        sup { top: -0.5em; }
+        sub { bottom: -0.25em; }
+        
+        /* iPad等でのタッチハイライト無効化 */
+        .option-btn { -webkit-tap-highlight-color: transparent; }
+        
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex justify-center text-slate-800 touch-manipulation">
+
+    <div id="app-container" class="w-full max-w-3xl bg-white shadow-2xl min-h-screen flex flex-col relative overflow-hidden sm:min-h-[100dvh]">
+        
+        <!-- ヘッダー -->
+        <header class="bg-blue-800 text-white p-4 text-center shadow-md z-10">
+            <h1 class="text-2xl font-bold tracking-wider">発展化学式 タイムアタック</h1>
+        </header>
+
+        <!-- スタート画面 -->
+        <div id="screen-start" class="flex-1 flex flex-col justify-center items-center p-8 fade-in">
+            <div class="bg-blue-50 border border-blue-200 p-6 rounded-2xl w-full max-w-md text-center shadow-sm mb-8">
+                <h2 class="text-xl font-bold text-blue-900 mb-2">1分間チャレンジ！</h2>
+                <p class="text-slate-600 mb-4">基礎から発展まで、100種類の物質が出題されます。<br>物質名⇔化学式 を素早く見極めよう。</p>
+                
+                <div class="mb-6">
+                    <label for="nickname" class="block text-sm font-medium text-slate-700 mb-2 text-left">ニックネームを入力</label>
+                    <input type="text" id="nickname" placeholder="例: ケミスト太郎" class="w-full px-4 py-3 text-lg border-2 border-slate-300 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" maxlength="10">
+                    <p id="name-error" class="text-red-500 text-sm mt-2 hidden text-left">ニックネームを入力してください。</p>
+                </div>
+                
+                <button id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl text-xl shadow-md transition-transform active:scale-95">
+                    クイズをスタート
+                </button>
+            </div>
+            <p class="text-xs text-slate-400">※ランキングデータはクラウド上に保存されます。</p>
+        </div>
+
+        <!-- クイズ画面 -->
+        <div id="screen-quiz" class="flex-1 flex flex-col p-4 sm:p-6 hidden bg-slate-50 relative">
+            
+            <!-- フィードバック（正解・不正解のポップアップ） -->
+            <div id="feedback-banner" class="absolute top-4 left-4 right-4 p-4 rounded-xl text-center font-bold text-lg shadow-lg hidden z-20 transition-all">
+                <span id="feedback-text"></span>
+            </div>
+
+            <!-- ステータスバー -->
+            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-6 border border-slate-200">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-slate-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span class="text-xl font-bold text-slate-700" id="time-display">60</span><span class="text-slate-500 ml-1">秒</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-slate-500 mr-2">正解数:</span>
+                    <span class="text-2xl font-bold text-blue-600" id="score-display">0</span>
+                </div>
+            </div>
+
+            <!-- 問題表示エリア -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 text-center flex-1 flex flex-col justify-center">
+                <p id="question-prompt" class="text-slate-500 font-medium mb-4 text-lg">次の物質の化学式はどれ？</p>
+                <h2 id="question-text" class="text-4xl font-bold text-slate-800 tracking-wide break-words">問題読込中...</h2>
+            </div>
+
+            <!-- 選択肢エリア -->
+            <div id="options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4">
+                <!-- ボタンはJavaScriptで生成 -->
+            </div>
+        </div>
+
+        <!-- リザルト画面 -->
+        <div id="screen-result" class="flex-1 flex flex-col p-4 sm:p-6 hidden overflow-y-auto bg-slate-50">
+            <div class="text-center mb-8 fade-in">
+                <h2 class="text-3xl font-bold text-blue-800 mb-2">タイムアップ！</h2>
+                <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200 inline-block w-full max-w-sm">
+                    <p class="text-slate-500 mb-1">あなたの正解数</p>
+                    <div class="text-5xl font-black text-blue-600 mb-4"><span id="final-score">0</span><span class="text-2xl text-slate-600 ml-2">問</span></div>
+                    <button id="btn-restart" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl shadow transition-transform active:scale-95">
+                        もう一度プレイする
+                    </button>
+                </div>
+            </div>
+
+            <!-- タブ切り替え -->
+            <div class="flex border-b border-slate-300 mb-6">
+                <button id="tab-ranking" class="flex-1 py-3 text-center font-bold text-blue-700 border-b-4 border-blue-600 transition-colors">クラウドランキング</button>
+                <button id="tab-review" class="flex-1 py-3 text-center font-bold text-slate-500 border-b-4 border-transparent hover:text-blue-600 transition-colors">出題された物質</button>
+            </div>
+
+            <!-- ランキング表示エリア -->
+            <div id="ranking-area" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-8">
+                <h3 class="text-lg font-bold text-slate-700 border-b pb-2 mb-4">上位ランカー (Top 10)</h3>
+                <ul id="rankings-list" class="space-y-2">
+                    <li class="text-center text-slate-500 py-4">ランキングデータを読み込み中...</li>
+                </ul>
+            </div>
+
+            <!-- 復習エリア -->
+            <div id="review-area" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-8">
+                <h3 class="text-lg font-bold text-slate-700 border-b pb-2 mb-4">今回出題された物質の特徴</h3>
+                <div id="asked-questions-list" class="space-y-4">
+                    <!-- JavaScriptで生成 -->
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- アプリケーションロジック -->
+    <script type="module">
+        // ==========================================
+        // スプレッドシート連携 (Google Apps Script)
+        // ==========================================
+        // 指定された新しいGAS URLに更新しました
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzViEZldOcfYAs7W_wn_sBIQ-KJMINpemqfUDlFa16eTfDz-FAIWP5waWR80uYg5z01/exec";
+
+        // ==========================================
+        // 化学物質データ（高校1年基礎〜3年発展 100選）
+        // ==========================================
+        const substances = [
+            { name: "水素", formula: "H<sub>2</sub>", desc: "最も軽い気体。可燃性があり、燃えると水になる。" },
+            { name: "ヘリウム", formula: "He", desc: "水素に次いで軽く、不燃性の気体。気球などに使われる。" },
+            { name: "窒素", formula: "N<sub>2</sub>", desc: "空気の約78%を占める無色無臭の気体。反応性に乏しい。" },
+            { name: "酸素", formula: "O<sub>2</sub>", desc: "空気の約21%を占める。助燃性（他の物質が燃えるのを助ける性質）がある。" },
+            { name: "オゾン", formula: "O<sub>3</sub>", desc: "特異臭のある淡青色の気体。酸化力が強く、紫外線を吸収する。" },
+            { name: "塩素", formula: "Cl<sub>2</sub>", desc: "黄緑色で刺激臭のある有毒な気体。漂白作用や殺菌作用がある。" },
+            { name: "ナトリウム", formula: "Na", desc: "水と激しく反応して水素を発生するアルカリ金属。常温では灯油中に保存する。" },
+            { name: "マグネシウム", formula: "Mg", desc: "熱水と反応する。燃焼すると強い光を出す（フラッシュランプなど）。" },
+            { name: "アルミニウム", formula: "Al", desc: "軽くてさびにくく、両性金属（酸にも強塩基にも溶ける）の代表。" },
+            { name: "鉄", formula: "Fe", desc: "広く使われる金属。湿った空気中で赤さびを生じる。" },
+            { name: "銅", formula: "Cu", desc: "赤みを帯びた金属。電気伝導性が高く、電線などに使われる。" },
+            { name: "銀", formula: "Ag", desc: "金属の中で最も電気伝導性・熱伝導性が高い。" },
+            { name: "水", formula: "H<sub>2</sub>O", desc: "生命に不可欠な液体。様々な物質を溶かす良い溶媒。" },
+            { name: "過酸化水素", formula: "H<sub>2</sub>O<sub>2</sub>", desc: "酸化剤としても還元剤としても働く。水溶液はオキシドールと呼ばれる。" },
+            { name: "一酸化炭素", formula: "CO", desc: "炭素の不完全燃焼で生じる有毒な気体。還元性をもつ。" },
+            { name: "二酸化炭素", formula: "CO<sub>2</sub>", desc: "石灰水を白濁させる無色無臭の気体。固体はドライアイス。" },
+            { name: "一酸化窒素", formula: "NO", desc: "無色無臭の気体。空気に触れると速やかに酸化され二酸化窒素になる。" },
+            { name: "二酸化窒素", formula: "NO<sub>2</sub>", desc: "赤褐色の刺激臭のある有毒な気体。水に溶けると硝酸を生じる。" },
+            { name: "二酸化硫黄", formula: "SO<sub>2</sub>", desc: "刺激臭のある無色の気体。還元性があり、漂白剤などに使われる。" },
+            { name: "硫化水素", formula: "H<sub>2</sub>S", desc: "腐卵臭（卵の腐ったにおい）のある有毒な気体。強い還元剤。" },
+            { name: "アンモニア", formula: "NH<sub>3</sub>", desc: "刺激臭のある無色の気体。水に非常に溶けやすく、水溶液は弱塩基性。" },
+            { name: "フッ化水素", formula: "HF", desc: "水溶液はフッ化水素酸と呼ばれる弱酸。ガラス（二酸化ケイ素）を溶かす。" },
+            { name: "塩化水素", formula: "HCl", desc: "刺激臭のある気体。水溶液は塩酸（強酸）と呼ばれる。" },
+            { name: "硝酸", formula: "HNO<sub>3</sub>", desc: "強い酸化力をもつ強酸。光で分解するため褐色瓶で保存する。" },
+            { name: "硫酸", formula: "H<sub>2</sub>SO<sub>4</sub>", desc: "粘性のある重い液体。濃硫酸は強い脱水作用や吸湿作用をもつ。" },
+            { name: "酢酸", formula: "CH<sub>3</sub>COOH", desc: "食酢に含まれる弱酸。純粋なものは冬季に凍結するため氷酢酸と呼ばれる。" },
+            { name: "シュウ酸", formula: "H<sub>2</sub>C<sub>2</sub>O<sub>4</sub>", desc: "還元性をもつ弱酸。（COOH)2 とも表記される。" },
+            { name: "水酸化ナトリウム", formula: "NaOH", desc: "強塩基。空気中の水分を吸収して溶ける性質（潮解性）をもつ。" },
+            { name: "水酸化カルシウム", formula: "Ca(OH)<sub>2</sub>", desc: "消石灰とも呼ばれる強塩基。水溶液は石灰水。" },
+            { name: "水酸化バリウム", formula: "Ba(OH)<sub>2</sub>", desc: "強塩基。硫酸イオンと反応して白色沈殿を生じる。" },
+            { name: "水酸化鉄(II)", formula: "Fe(OH)<sub>2</sub>", desc: "緑白色の沈殿。空気中で酸化されて水酸化鉄(III)になりやすい。" },
+            { name: "水酸化鉄(III)", formula: "Fe(OH)<sub>3</sub>", desc: "赤褐色の沈殿。" },
+            { name: "水酸化銅(II)", formula: "Cu(OH)<sub>2</sub>", desc: "青白色の沈殿。加熱すると黒色の酸化銅(II)になる。" },
+            { name: "塩化ナトリウム", formula: "NaCl", desc: "食塩の主成分。炎色反応は黄色。" },
+            { name: "塩化カルシウム", formula: "CaCl<sub>2</sub>", desc: "吸湿性が高く、乾燥剤や融雪剤として用いられる。" },
+            { name: "塩化アンモニウム", formula: "NH<sub>4</sub>Cl", desc: "加熱するとアンモニアと塩化水素に分解する（昇華しやすい）。" },
+            { name: "塩化銀", formula: "AgCl", desc: "白色の沈殿。光を当てると分解して銀を析出する（感光性）。" },
+            { name: "炭酸ナトリウム", formula: "Na<sub>2</sub>CO<sub>3</sub>", desc: "ガラスの原料などに使われる。水溶液は塩基性を示す。" },
+            { name: "炭酸水素ナトリウム", formula: "NaHCO<sub>3</sub>", desc: "重曹とも呼ばれる。加熱すると二酸化炭素を発生する。" },
+            { name: "炭酸カルシウム", formula: "CaCO<sub>3</sub>", desc: "石灰石や大理石の主成分。塩酸に溶けて二酸化炭素を発生する。" },
+            { name: "硫酸バリウム", formula: "BaSO<sub>4</sub>", desc: "水に不溶な白色沈殿。X線造影剤に使われる。" },
+            { name: "硫酸銅(II)五水和物", formula: "CuSO<sub>4</sub>・5H<sub>2</sub>O", desc: "青色の結晶。加熱すると水を失い無色の硫酸銅(II)無水物になる。" },
+            { name: "硝酸カリウム", formula: "KNO<sub>3</sub>", desc: "黒色火薬の原料や肥料として使われる。" },
+            { name: "硝酸銀", formula: "AgNO<sub>3</sub>", desc: "水によく溶け、塩化物イオンの検出試薬として用いられる。" },
+            { name: "硫化鉄(II)", formula: "FeS", desc: "黒色の固体。希塩酸などを加えると硫化水素を発生する。" },
+            { name: "硫化亜鉛", formula: "ZnS", desc: "白色の沈殿。蛍光塗料などに用いられる。" },
+            { name: "硫化銅(II)", formula: "CuS", desc: "黒色の沈殿。酸性水溶液中でも沈殿する。" },
+            { name: "酸化銅(II)", formula: "CuO", desc: "黒色の粉末。銅を空気中で加熱すると生じる。" },
+            { name: "酸化銀", formula: "Ag<sub>2</sub>O", desc: "褐色の粉末。加熱すると容易に分解して銀と酸素になる。" },
+            { name: "酸化マグネシウム", formula: "MgO", desc: "白色の粉末。融点が高く、耐火煉瓦などに使われる。" },
+            { name: "酸化カルシウム", formula: "CaO", desc: "生石灰と呼ばれる。水と激しく反応して発熱し水酸化カルシウムになる。" },
+            { name: "酸化アルミニウム", formula: "Al<sub>2</sub>O<sub>3</sub>", desc: "アルミナと呼ばれる。サファイアやルビーの主成分でもある。" },
+            { name: "メタン", formula: "CH<sub>4</sub>", desc: "天然ガスの主成分。最も単純なアルカン（炭化水素）。" },
+            { name: "エタン", formula: "C<sub>2</sub>H<sub>6</sub>", desc: "炭素数2のアルカン。無色無臭の気体。" },
+            { name: "プロパン", formula: "C<sub>3</sub>H<sub>8</sub>", desc: "LPガスの主成分。炭素数3のアルカン。" },
+            { name: "ブタン", formula: "C<sub>4</sub>H<sub>10</sub>", desc: "カセットコンロのガスなどに使われる炭素数4のアルカン。" },
+            { name: "エチレン", formula: "C<sub>2</sub>H<sub>4</sub>", desc: "二重結合を1つ持つアルケン。果実の熟成を促す作用がある。" },
+            { name: "アセチレン", formula: "C<sub>2</sub>H<sub>2</sub>", desc: "三重結合を1つ持つアルキン。酸素と混ぜて燃やすと非常に高温になる。" },
+            { name: "メタノール", formula: "CH<sub>3</sub>OH", desc: "有毒なアルコール。燃料や溶剤として使われる。" },
+            { name: "エタノール", formula: "C<sub>2</sub>H<sub>5</sub>OH", desc: "酒類の主成分であるアルコール。殺菌・消毒作用がある。" },
+            { name: "ジメチルエーテル", formula: "CH<sub>3</sub>OCH<sub>3</sub>", desc: "エタノールの構造異性体。無色の気体。" },
+            { name: "ホルムアルデヒド", formula: "HCHO", desc: "刺激臭のある有毒な気体。水溶液はホルマリンと呼ばれる。" },
+            { name: "アセトアルデヒド", formula: "CH<sub>3</sub>CHO", desc: "エタノールが酸化されて生じる。二日酔いの原因物質。" },
+            { name: "アセトン", formula: "CH<sub>3</sub>COCH<sub>3</sub>", desc: "代表的なケトン。除光液（マニキュア落とし）などに使われる。" },
+            { name: "ギ酸", formula: "HCOOH", desc: "アリが持つ刺激性の酸。アルデヒド基を持つため還元性を示す。" },
+            { name: "ベンゼン", formula: "C<sub>6</sub>H<sub>6</sub>", desc: "代表的な芳香族炭化水素。正六角形の平面構造をもつ。" },
+            { name: "トルエン", formula: "C<sub>6</sub>H<sub>5</sub>CH<sub>3</sub>", desc: "ベンゼンの水素1つがメチル基に置換された化合物。" },
+            { name: "フェノール", formula: "C<sub>6</sub>H<sub>5</sub>OH", desc: "ベンゼン環にヒドロキシ基が直接結合した化合物。特有の臭いがある弱酸。" },
+            { name: "アニリン", formula: "C<sub>6</sub>H<sub>5</sub>NH<sub>2</sub>", desc: "ベンゼン環にアミノ基が結合した化合物。弱塩基性を示す。" },
+            { name: "ニトロベンゼン", formula: "C<sub>6</sub>H<sub>5</sub>NO<sub>2</sub>", desc: "ベンゼンをニトロ化して得られる。淡黄色の油状液体。" },
+            { name: "サリチル酸", formula: "C<sub>6</sub>H<sub>4</sub>(OH)COOH", desc: "フェノール類とカルボン酸の両方の性質をもつ。解熱鎮痛剤の原料。" },
+            { name: "クロム酸銀", formula: "Ag<sub>2</sub>CrO<sub>4</sub>", desc: "暗赤色の沈殿。沈殿滴定の指示薬として使われる。" },
+            { name: "テトラアンミン銅(II)イオン", formula: "[Cu(NH<sub>3</sub>)<sub>4</sub>]<sup>2+</sup>", desc: "深青色の錯イオン。正方形の構造をもつ。" },
+            { name: "ジアンミン銀(I)イオン", formula: "[Ag(NH<sub>3</sub>)<sub>2</sub>]<sup>+</sup>", desc: "トレンス試薬に含まれる直線型の錯イオン。銀鏡反応を示す。" },
+            { name: "テトラヒドロキシド亜鉛(II)酸イオン", formula: "[Zn(OH)<sub>4</sub>]<sup>2-</sup>", desc: "両性金属である亜鉛が過剰の強塩基に溶けたときに生じる無色の錯イオン。" },
+            { name: "ヘキサシアニド鉄(II)酸カリウム", formula: "K<sub>4</sub>[Fe(CN)<sub>6</sub>]", desc: "鉄(III)イオンと反応して濃青色の沈殿を生じる。" },
+            { name: "ヘキサシアニド鉄(III)酸カリウム", formula: "K<sub>3</sub>[Fe(CN)<sub>6</sub>]", desc: "鉄(II)イオンと反応して濃青色の沈殿を生じる。" },
+            { name: "無水フタル酸", formula: "C<sub>8</sub>H<sub>4</sub>O<sub>3</sub>", desc: "フタル酸を加熱脱水して得られる。樹脂の原料など。" },
+            { name: "アセチルサリチル酸", formula: "C<sub>6</sub>H<sub>4</sub>(OCOCH<sub>3</sub>)COOH", desc: "解熱鎮痛剤（アスピリン）として広く用いられる。" },
+            { name: "塩化ベンゼンジアゾニウム", formula: "C<sub>6</sub>H<sub>5</sub>N<sub>2</sub>Cl", desc: "アニリンを氷冷下でジアゾ化すると生じる不安定な塩。" },
+            { name: "p-ヒドロキシアゾベンゼン", formula: "C<sub>6</sub>H<sub>5</sub>-N=N-C<sub>6</sub>H<sub>4</sub>-OH", desc: "ジアゾカップリングにより生じる橙赤色の染料。" },
+            { name: "クメン", formula: "C<sub>6</sub>H<sub>5</sub>CH(CH<sub>3</sub>)<sub>2</sub>", desc: "ベンゼンとプロピレンから合成される。フェノール製造の原料。" },
+            { name: "ピクリン酸", formula: "C<sub>6</sub>H<sub>2</sub>(OH)(NO<sub>2</sub>)<sub>3</sub>", desc: "黄色の爆発性物質。2,4,6-トリニトロフェノールのこと。" },
+            { name: "チオ硫酸ナトリウム", formula: "Na<sub>2</sub>S<sub>2</sub>O<sub>3</sub>", desc: "ハロゲン化銀を溶かす性質があり、写真の定着液に用いられる。" },
+            { name: "スチレン", formula: "C<sub>6</sub>H<sub>5</sub>CH=CH<sub>2</sub>", desc: "ポリスチレン（発泡スチロールなどの原料）の単量体。" },
+            { name: "酢酸エチル", formula: "CH<sub>3</sub>COOC<sub>2</sub>H<sub>5</sub>", desc: "酢酸とエタノールから合成されるエステル。果実のような芳香がある。" },
+            { name: "塩化ビニル", formula: "CH<sub>2</sub>=CHCl", desc: "ポリ塩化ビニル（塩ビ）の単量体。" },
+            { name: "アクリロニトリル", formula: "CH<sub>2</sub>=CHCN", desc: "ポリアクリロニトリル（アクリル繊維の原料）の単量体。" },
+            { name: "フタル酸", formula: "C<sub>6</sub>H<sub>4</sub>(COOH)<sub>2</sub>", desc: "ベンゼン環のオルト位に2つのカルボキシ基をもつジカルボン酸。" },
+            { name: "テレフタル酸", formula: "C<sub>6</sub>H<sub>4</sub>(COOH)<sub>2</sub>", desc: "ベンゼン環のパラ位に2つのカルボキシ基をもつ。PETの原料。" },
+            { name: "ヘキサメチレンジアミン", formula: "H<sub>2</sub>N(CH<sub>2</sub>)<sub>6</sub>NH<sub>2</sub>", desc: "ナイロン66の原料となるジアミン。" },
+            { name: "アジピン酸", formula: "HOOC(CH<sub>2</sub>)<sub>4</sub>COOH", desc: "ナイロン66の原料となるジカルボン酸。" },
+            { name: "尿素", formula: "CO(NH<sub>2</sub>)<sub>2</sub>", desc: "無機物から初めて人工合成された有機化合物。肥料などに使われる。" },
+            { name: "フッ化カルシウム", formula: "CaF<sub>2</sub>", desc: "蛍石の主成分。濃硫酸を加えて加熱するとフッ化水素を発生する。" },
+            { name: "塩化鉄(III)", formula: "FeCl<sub>3</sub>", desc: "黄褐色の水溶液。フェノール類を検出する試薬（紫〜赤色を示す）として用いられる。" },
+            { name: "硫酸亜鉛", formula: "ZnSO<sub>4</sub>", desc: "水によく溶ける白色結晶。ダニエル電池の電解液などに用いられる。" },
+            { name: "炭酸水素カルシウム", formula: "Ca(HCO<sub>3</sub>)<sub>2</sub>", desc: "石灰岩（炭酸カルシウム）が二酸化炭素を含む水に溶けたときに生じる。鍾乳洞形成の原因。" },
+            { name: "過マンガン酸カリウム", formula: "KMnO<sub>4</sub>", desc: "黒紫色の結晶。強力な酸化剤で、水溶液は赤紫色を示す。" },
+            { name: "二クロム酸カリウム", formula: "K<sub>2</sub>Cr<sub>2</sub>O<sub>7</sub>", desc: "赤橙色の結晶。強力な酸化剤。" },
+            { name: "クロム酸カリウム", formula: "K<sub>2</sub>CrO<sub>4</sub>", desc: "黄色の結晶。銀イオン、バリウムイオン、鉛(II)イオンなどと沈殿を作る。" }
+        ];
+
+        // ==========================================
+        // アプリケーション状態
+        // ==========================================
+        let currentPlayerName = "";
+        let score = 0;
+        let timeLeft = 60;
+        let timerInterval = null;
+        let isWaiting = false; // ボタン連打防止
+        let currentQuestionType = ""; // 'to_formula' or 'to_name'
+        let currentCorrectItem = null;
+        let questionPool = [];
+        let askedQuestions = []; // 今回出題された物質のリスト（重複なし）
+
+        // ==========================================
+        // DOM要素
+        // ==========================================
+        const screenStart = document.getElementById('screen-start');
+        const screenQuiz = document.getElementById('screen-quiz');
+        const screenResult = document.getElementById('screen-result');
+        
+        const inputNickname = document.getElementById('nickname');
+        const errorName = document.getElementById('name-error');
+        const btnStart = document.getElementById('btn-start');
+        
+        const timeDisplay = document.getElementById('time-display');
+        const scoreDisplay = document.getElementById('score-display');
+        const questionPrompt = document.getElementById('question-prompt');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        
+        const feedbackBanner = document.getElementById('feedback-banner');
+        const feedbackText = document.getElementById('feedback-text');
+        
+        const finalScoreDisplay = document.getElementById('final-score');
+        const btnRestart = document.getElementById('btn-restart');
+        
+        const tabRanking = document.getElementById('tab-ranking');
+        const tabReview = document.getElementById('tab-review');
+        const rankingArea = document.getElementById('ranking-area');
+        const reviewArea = document.getElementById('review-area');
+
+        // ==========================================
+        // イベントリスナー
+        // ==========================================
+        btnStart.addEventListener('click', startGame);
+        btnRestart.addEventListener('click', () => {
+            screenResult.classList.add('hidden');
+            screenStart.classList.remove('hidden');
+            inputNickname.value = currentPlayerName; // 名前を保持
+        });
+
+        tabRanking.addEventListener('click', () => {
+            tabRanking.classList.replace('text-slate-500', 'text-blue-700');
+            tabRanking.classList.replace('border-transparent', 'border-blue-600');
+            tabReview.classList.replace('text-blue-700', 'text-slate-500');
+            tabReview.classList.replace('border-blue-600', 'border-transparent');
+            rankingArea.classList.remove('hidden');
+            reviewArea.classList.add('hidden');
+        });
+
+        tabReview.addEventListener('click', () => {
+            tabReview.classList.replace('text-slate-500', 'text-blue-700');
+            tabReview.classList.replace('border-transparent', 'border-blue-600');
+            tabRanking.classList.replace('text-blue-700', 'text-slate-500');
+            tabRanking.classList.replace('border-blue-600', 'border-transparent');
+            reviewArea.classList.remove('hidden');
+            rankingArea.classList.add('hidden');
+        });
+
+        // ==========================================
+        // ゲームロジック
+        // ==========================================
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function startGame() {
+            const name = inputNickname.value.trim();
+            if (!name) {
+                errorName.classList.remove('hidden');
+                return;
+            }
+            errorName.classList.add('hidden');
+            currentPlayerName = name;
+            
+            // 初期化
+            score = 0;
+            timeLeft = 60;
+            askedQuestions = [];
+            questionPool = [...substances];
+            shuffleArray(questionPool);
+            
+            updateScoreDisplay();
+            updateTimeDisplay();
+            
+            // 画面切り替え
+            screenStart.classList.add('hidden');
+            screenQuiz.classList.remove('hidden');
+            screenQuiz.classList.add('fade-in');
+            
+            startTimer();
+            setNextQuestion();
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimeDisplay();
+                
+                if (timeLeft <= 10) {
+                    timeDisplay.classList.add('text-red-500');
+                } else {
+                    timeDisplay.classList.remove('text-red-500');
+                }
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function updateTimeDisplay() {
+            timeDisplay.textContent = timeLeft;
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = score;
+        }
+
+        function getNextSubstance() {
+            if (questionPool.length === 0) {
+                questionPool = [...substances];
+                shuffleArray(questionPool);
+            }
+            return questionPool.pop();
+        }
+
+        function setNextQuestion() {
+            isWaiting = false;
+            currentCorrectItem = getNextSubstance();
+            
+            // 問題形式をランダム決定
+            currentQuestionType = Math.random() > 0.5 ? 'to_formula' : 'to_name';
+            
+            if (currentQuestionType === 'to_formula') {
+                questionPrompt.textContent = "次の物質の化学式はどれ？";
+                questionText.innerHTML = currentCorrectItem.name;
+            } else {
+                questionPrompt.textContent = "次の化学式が表す物質名はどれ？";
+                questionText.innerHTML = currentCorrectItem.formula;
+            }
+
+            // 出題履歴に保存（重複排除）
+            if (!askedQuestions.some(item => item.name === currentCorrectItem.name)) {
+                askedQuestions.push(currentCorrectItem);
+            }
+
+            generateOptions();
+        }
+
+        function generateOptions() {
+            optionsContainer.innerHTML = '';
+            
+            // ダミー選択肢を3つ選ぶ
+            let others = substances.filter(s => s.name !== currentCorrectItem.name);
+            shuffleArray(others);
+            let optionsData = [currentCorrectItem, ...others.slice(0, 3)];
+            shuffleArray(optionsData);
+
+            optionsData.forEach((item, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn w-full py-4 px-2 bg-white border-2 border-slate-200 rounded-xl text-lg sm:text-xl font-bold text-center hover:bg-slate-50 transition-colors shadow-sm min-h-[80px] flex items-center justify-center break-all';
+                
+                if (currentQuestionType === 'to_formula') {
+                    btn.innerHTML = item.formula;
+                } else {
+                    btn.innerHTML = item.name;
+                }
+                
+                btn.addEventListener('click', () => checkAnswer(item, btn, optionsData));
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(selectedItem, btnElement, allOptions) {
+            if (isWaiting) return;
+            isWaiting = true;
+
+            const isCorrect = (selectedItem.name === currentCorrectItem.name);
+            const allButtons = optionsContainer.children;
+
+            if (isCorrect) {
+                // 正解
+                btnElement.classList.replace('border-slate-200', 'border-green-500');
+                btnElement.classList.replace('bg-white', 'bg-green-50');
+                score++;
+                updateScoreDisplay();
+                
+                showFeedback(true, "正解！");
+                
+                setTimeout(() => {
+                    hideFeedback();
+                    setNextQuestion();
+                }, 700);
+            } else {
+                // 不正解
+                btnElement.classList.replace('border-slate-200', 'border-red-500');
+                btnElement.classList.replace('bg-white', 'bg-red-50');
+                
+                // 正解のボタンを緑にする
+                Array.from(allButtons).forEach(b => {
+                    if (currentQuestionType === 'to_formula') {
+                        if (b.innerHTML === currentCorrectItem.formula) {
+                            b.classList.replace('border-slate-200', 'border-green-500');
+                            b.classList.replace('bg-white', 'bg-green-50');
+                        }
+                    } else {
+                        if (b.innerHTML === currentCorrectItem.name) {
+                            b.classList.replace('border-slate-200', 'border-green-500');
+                            b.classList.replace('bg-white', 'bg-green-50');
+                        }
+                    }
+                });
+
+                // 詳細なフィードバックを表示
+                const answerText = `${currentCorrectItem.name} ＝ ${currentCorrectItem.formula}`;
+                showFeedback(false, `不正解... 正解は ${answerText}`);
+                
+                setTimeout(() => {
+                    hideFeedback();
+                    setNextQuestion();
+                }, 2500); // 誤答時は解説を読むために少し長く待つ
+            }
+        }
+
+        function showFeedback(isCorrect, message) {
+            feedbackBanner.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            if (isCorrect) {
+                feedbackBanner.classList.add('bg-green-100', 'text-green-800');
+            } else {
+                feedbackBanner.classList.add('bg-red-100', 'text-red-800');
+            }
+            feedbackText.innerHTML = message;
+        }
+
+        function hideFeedback() {
+            feedbackBanner.classList.add('hidden');
+        }
+
+        async function endGame() {
+            screenQuiz.classList.add('hidden');
+            screenResult.classList.remove('hidden');
+            screenResult.classList.add('fade-in');
+            
+            finalScoreDisplay.textContent = score;
+            
+            // 復習リストの生成
+            renderReviewList();
+            
+            // スコアをスプレッドシート経由(GAS)で保存
+            await saveScore();
+            
+            // デフォルトはランキングタブを表示
+            tabRanking.click();
+            loadRankings();
+        }
+
+        function renderReviewList() {
+            const container = document.getElementById('asked-questions-list');
+            container.innerHTML = '';
+            
+            if (askedQuestions.length === 0) {
+                container.innerHTML = '<p class="text-slate-500">出題された問題はありません。</p>';
+                return;
+            }
+
+            askedQuestions.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'bg-blue-50/50 p-4 rounded-xl border border-blue-100';
+                div.innerHTML = `
+                    <div class="flex flex-wrap items-baseline mb-2">
+                        <span class="font-bold text-lg text-blue-900 mr-3">${item.name}</span>
+                        <span class="text-lg text-slate-700 font-serif">${item.formula}</span>
+                    </div>
+                    <p class="text-sm text-slate-600 leading-relaxed">${item.desc}</p>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ==========================================
+        // クラウドデータベース(スプレッドシート)連携
+        // ==========================================
+        async function saveScore() {
+            try {
+                const data = {
+                    nickname: currentPlayerName,
+                    score: score,
+                    timestamp: Date.now()
+                };
+
+                // GASのWebアプリへPOSTリクエスト
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain', // GASのCORS回避のためtext/plainを使用
+                    },
+                    body: JSON.stringify(data),
+                    redirect: 'follow' // リダイレクトに追従するよう設定
+                });
+            } catch (error) {
+                console.error("Score Save Error:", error);
+            }
+        }
+
+        async function loadRankings() {
+            const listElement = document.getElementById('rankings-list');
+            listElement.innerHTML = '<li class="text-center text-slate-500 py-4">読み込み中...</li>';
+
+            if (GAS_URL === "YOUR_GAS_WEB_APP_URL" || !GAS_URL) {
+                listElement.innerHTML = '<li class="text-center text-red-500 py-4 text-sm">GASのURLが設定されていません。<br>ソースコード内の GAS_URL を更新してください。</li>';
+                return;
+            }
+
+            try {
+                // キャッシュバスターを付与し、常に最新のデータを取得
+                const fetchUrl = GAS_URL.includes('?') ? `${GAS_URL}&t=${Date.now()}` : `${GAS_URL}?t=${Date.now()}`;
+                
+                const response = await fetch(fetchUrl, {
+                    method: 'GET',
+                    redirect: 'follow' // リダイレクトに追従するよう設定
+                });
+                
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const rankings = await response.json();
+                
+                listElement.innerHTML = '';
+                if (!rankings || rankings.length === 0) {
+                    listElement.innerHTML = '<li class="text-center text-slate-500 py-4">まだ記録がありません。一番乗りを目指そう！</li>';
+                    return;
+                }
+
+                rankings.forEach((data, index) => {
+                    const li = document.createElement('li');
+                    let rankClass = "bg-slate-100 text-slate-600";
+                    if (index === 0) rankClass = "bg-yellow-100 text-yellow-700 border border-yellow-300";
+                    else if (index === 1) rankClass = "bg-slate-200 text-slate-700 border border-slate-300";
+                    else if (index === 2) rankClass = "bg-orange-100 text-orange-800 border border-orange-200";
+
+                    // UIDがないため、直近にプレイした自分自身のスコアと同等かで簡易判定
+                    const isMe = (data.nickname === currentPlayerName && data.score === score && Date.now() - data.timestamp < 120000);
+                    
+                    li.className = `flex justify-between items-center p-3 rounded-lg ${rankClass} ${isMe ? 'ring-2 ring-blue-500' : ''}`;
+                    li.innerHTML = `
+                        <div class="flex items-center">
+                            <span class="font-bold w-8 text-center">${index + 1}</span>
+                            <span class="font-medium ml-2 truncate max-w-[150px] sm:max-w-[200px]">${escapeHTML(data.nickname)}</span>
+                            ${isMe ? '<span class="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">あなた</span>' : ''}
+                        </div>
+                        <div class="font-bold text-lg">${data.score} <span class="text-sm font-normal">問</span></div>
+                    `;
+                    listElement.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Ranking Load Error:", error);
+                
+                // エラー内容がGASの設定に起因している可能性が高いため、ユーザーに解決策を提示
+                listElement.innerHTML = `
+                    <li class="p-4 bg-red-50 text-red-600 rounded-xl text-sm text-left border border-red-200 shadow-sm">
+                        <span class="font-bold text-red-700 block mb-2 text-base">通信エラー (Failed to fetch) が発生しました</span>
+                        <p class="mb-3 text-slate-700">スプレッドシート連携（GAS）のアクセス権限設定が原因の可能性が高いです。</p>
+                        <p class="font-bold mt-2 mb-1 border-b border-red-200 pb-1">【解決方法】</p>
+                        <ol class="list-decimal pl-5 space-y-1.5 mt-2 text-slate-700">
+                            <li>GASの画面右上の「デプロイ」＞「新しいデプロイ」を開く</li>
+                            <li>歯車アイコンから「ウェブアプリ」を選ぶ</li>
+                            <li><b>「アクセスできるユーザー」を「全員」にする</b><br>
+                                <span class="text-red-500 font-medium text-xs">※「自分のみ」や「Googleアカウントを持つ〜」だとエラーになります</span>
+                            </li>
+                            <li>「デプロイ」を押し、<b>新しく発行されたURL</b>をコードの GAS_URL に貼り直す</li>
+                        </ol>
+                    </li>
+                `;
+            }
+        }
+
+        // XSS対策
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+
+    </script>
+</body>
+</html>
